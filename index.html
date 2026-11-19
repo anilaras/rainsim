@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yağmur Simülatörü</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sol: parametreler -->
+    <aside id="controls" class="panel">
+      <header class="brand">
+        <h1>☔ Yağmur Simülatörü</h1>
+        <p>Yağmurun içinden geçen bir nesnenin ne kadar ıslandığını hesaplar.</p>
+      </header>
+      <div class="actions">
+        <button id="btn-play" class="primary">▶ Başlat</button>
+        <button id="btn-reset" title="Sıfırla (R)">↺ Sıfırla</button>
+        <button id="btn-fast" class="wide" title="Görselleştirmeyi atlayıp sonucu hızlıca hesaplar">⚡ Sonuca atla</button>
+      </div>
+      <select id="preset" class="preset"></select>
+      <div id="params"></div>
+      <footer class="foot muted">
+        Kısayollar: <kbd>Boşluk</kbd> başlat/duraklat · <kbd>R</kbd> sıfırla<br>
+        Görünüm: sürükle = döndür · tekerlek = yakınlaş · sağ tık/Shift+sürükle = yükseklik
+      </footer>
+    </aside>
+
+    <!-- Orta: 3B görünüm -->
+    <main id="viewport">
+      <div id="three"></div>
+      <div id="loading">three.js yükleniyor…</div>
+      <div class="hud hud-tl">
+        <span id="hud-state" class="badge" data-state="idle">Hazır</span>
+        <div class="hud-grid">
+          <span>Süre</span><b id="hud-time">0 s</b>
+          <span>Mesafe</span><b id="hud-dist">0 m</b>
+          <span>Hız</span><b id="hud-speed">0 m/s</b>
+          <span>Toplanan su</span><b id="hud-total" class="accent">0 ml</b>
+        </div>
+      </div>
+      <div class="hud hud-tr cam">
+        <button data-cam="persp">Perspektif</button>
+        <button data-cam="side">Yan</button>
+        <button data-cam="front">Ön</button>
+        <button data-cam="top">Üst</button>
+      </div>
+      <div class="hud hud-bottom">
+        <div class="progress"><i id="hud-progress"></i></div>
+        <div class="legend">
+          <span>Kuru</span>
+          <div class="legend-bar"></div>
+          <span id="legend-max">—</span>
+          <span class="legend-mid-wrap">orta: <span id="legend-mid"></span></span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Sağ: sonuçlar -->
+    <aside id="results" class="panel">
+      <section class="card big">
+        <div class="label">Toplam ıslanma</div>
+        <div id="r-total" class="value">0 <span>ml</span></div>
+        <div class="sub">≈ <span id="r-grams">0</span> g su · <span id="r-drops">0</span> damla çarptı</div>
+      </section>
+
+      <section class="card">
+        <div class="row"><span>Analitik beklenti</span><b id="r-exp">—</b></div>
+        <div class="row"><span>Simülasyon – analitik farkı</span><b id="r-diff">—</b></div>
+        <div class="row"><span title="Çarpan parçacık sayısına bağlı Monte Carlo belirsizliği; parçacık sayısı veya süre arttıkça azalır">İstatistiksel belirsizlik (1σ)</span><b id="r-unc">—</b></div>
+        <div class="row"><span>Ortalama su (yüzey başına)</span><b id="r-film">—</b></div>
+        <div class="row"><span>En ıslak bölge (%99)</span><b id="r-peak">—</b></div>
+        <div class="row"><span>Ortalama ıslanma hızı</span><b id="r-rate">—</b></div>
+      </section>
+
+      <section class="card">
+        <h3>Yüzeylere göre dağılım</h3>
+        <div id="r-sides"></div>
+      </section>
+
+      <section class="card">
+        <h3>Zamana göre birikim</h3>
+        <div class="chart-legend"><span class="l-sim"></span>simülasyon <span class="l-exp"></span>analitik</div>
+        <canvas id="chart-time" class="chart"></canvas>
+      </section>
+
+      <section class="card">
+        <h3>Hıza göre toplam ıslanma</h3>
+        <canvas id="chart-speed" class="chart"></canvas>
+        <p id="speed-note" class="note"></p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h3>Kayıtlı sonuçlar</h3>
+          <div class="mini-actions">
+            <button id="btn-save" title="Şu anki sonucu kaydet">+ Kaydet</button>
+            <button id="btn-csv" title="CSV olarak indir">CSV</button>
+            <button id="btn-clear-hist" title="Listeyi temizle">Temizle</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="history">
+            <thead><tr><th>#</th><th>Şekil</th><th>Hız</th><th>Yol</th><th>Yağış</th><th>Toplam</th><th>Analitik</th></tr></thead>
+            <tbody><tr><td colspan="7" class="muted center">Henüz kayıt yok. Bitirilen simülasyonlar burada listelenir.</td></tr></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card method">
+        <details>
+          <summary>Nasıl hesaplanıyor?</summary>
+          <p>Hesap, nesneyle birlikte hareket eden bir referans sisteminde yapılır. Damlaların nesneye göre hızı
+            <i>(rüzgar + türbülans − nesne hızı, −düşüş hızı)</i> olur. Her parçacık <i>w</i> gerçek damlayı temsil eder.
+            <i>w</i>, ayarlanan yağış şiddetini (mm/sa) tam olarak verecek şekilde seçilir.</p>
+          <p>Her adımda damlanın izlediği yol, nesnenin üçgen ağıyla kesiştirilir. Çarpan damlanın suyu
+            (<i>w × damla hacmi × tutma oranı</i>) çarptığı noktadaki yüzey hücresine eklenir. Isı haritası bu hücrelerdeki
+            ml/m² yoğunluğunu gösterir.</p>
+          <p>Damla çapı hacimden hesaplanır (D = ∛(6V/π)). Limit düşüş hızı Atlas vd. (1973) bağıntısıyla bulunur:
+            v = 9,65 − 10,3·e<sup>−0,6D</sup>. Analitik beklenti şöyle hesaplanır:
+            <i>(yağış akısı / düşüş hızı) × |v<sub>göreli</sub>| × izdüşüm alanı × süre</i>.</p>
+        </details>
+      </section>
+    </aside>
+  </div>
+
+  <script type="module">
+    window.addEventListener('error', (e) => {
+      const el = document.getElementById('loading');
+      if (el) el.textContent = 'Hata: ' + e.message;
+    });
+    try {
+      const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+      window.THREE = THREE;
+      for (const src of ['js/physics.js', 'js/objects.js', 'js/view.js', 'js/ui.js', 'js/main.js']) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = src; s.onload = res; s.onerror = () => rej(new Error(src + ' yüklenemedi'));
+          document.body.appendChild(s);
+        });
+      }
+    } catch (err) {
+      const el = document.getElementById('loading');
+      if (el) el.innerHTML = 'Yükleme hatası: ' + err.message + '<br><small>three.js için internet bağlantısı gerekir.</small>';
+      console.error(err);
+    }
+  </script>
+</body>
+</html>
