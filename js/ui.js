@@ -70,7 +70,7 @@
       ],
     },
     {
-      section: 'Simülasyon ve görünüm', key: 'sim', items: [
+      section: 'Simülasyon ve görünüm', key: 'sim', closed: true, items: [
         { id: 'particles', label: 'Parçacık sayısı', unit: '', min: 2000, max: 80000, step: 1000, def: 25000, reinit: true },
         { id: 'simSpeed', label: 'Simülasyon hızı', unit: '×', min: 0.1, max: 20, log: true, def: 1 },
         { id: 'heatScale', type: 'select', label: 'Islaklık renk skalası', options: [['auto', 'Otomatik'], ['fixed', 'Sabit üst sınır']], def: 'auto' },
@@ -91,6 +91,8 @@
     storm: { name: 'Fırtına', v: { intensity: 80, dropVol: 0.04, sizeVar: 40, windSpeed: 18, windDir: 200, turbulence: 3 } },
   };
 
+  const icon = (name) => `<svg class="i" aria-hidden="true"><use href="#i-${name}"/></svg>`;
+
   function windText(deg) {
     const names = ['arkadan', 'sol-arkadan', 'soldan', 'sol-önden', 'önden', 'sağ-önden', 'sağdan', 'sağ-arkadan'];
     return names[((Math.round(deg / 45) % 8) + 8) % 8];
@@ -110,7 +112,7 @@
     const css = getComputedStyle(document.documentElement);
     const cGrid = css.getPropertyValue('--grid').trim() || '#2a3340';
     const cText = css.getPropertyValue('--muted').trim() || '#8b97a8';
-    const padL = 46, padR = 10, padT = 10, padB = 24;
+    const padL = 46, padR = 10, padT = cfg.yLabel ? 24 : 10, padB = 24;
     const pw = W - padL - padR, ph = H - padT - padB;
 
     let xmax = cfg.xmax, ymax = 0;
@@ -122,6 +124,12 @@
     const X = (x) => padL + ((x - xmin) / (xmax - xmin)) * pw;
     const Y = (y) => padT + ph - (y / ymax) * ph;
 
+    if (cfg.empty) {
+      g.font = '12px system-ui, sans-serif';
+      g.fillStyle = cText; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(cfg.empty, W / 2, H / 2);
+      return;
+    }
     g.font = '11px system-ui, sans-serif';
     g.strokeStyle = cGrid; g.fillStyle = cText; g.lineWidth = 1;
     g.textAlign = 'right'; g.textBaseline = 'middle';
@@ -130,12 +138,17 @@
       g.beginPath(); g.moveTo(padL, Y(y)); g.lineTo(W - padR, Y(y)); g.stroke();
       g.fillText(fmtSmart(y), padL - 6, Y(y));
     }
-    g.textAlign = 'center'; g.textBaseline = 'top';
-    for (let k = 0; k <= 4; k++) {
-      const x = xmin + ((xmax - xmin) * k) / 4;
-      g.fillText(fmtSmart(x), X(x), H - padB + 6);
-    }
-    if (cfg.xLabel) { g.textAlign = 'right'; g.fillText(cfg.xLabel, W - padR, H - 12 + 0); }
+    if (cfg.yLabel) { g.textAlign = 'right'; g.textBaseline = 'bottom'; g.fillText(cfg.yLabel, padL - 6, padT - 9); }
+    // x işaretleri: hepsi tam sayıysa ondalıksız yaz; birim son işaretin yanına gelir
+    const xs = [0, 1, 2, 3, 4].map((k) => xmin + ((xmax - xmin) * k) / 4);
+    const allInt = xs.every((x) => Math.abs(x - Math.round(x)) < 1e-9);
+    g.textBaseline = 'top';
+    xs.forEach((x, k) => {
+      let t = allInt ? fmtN(x, 0) : fmtSmart(x);
+      if (k === 4 && cfg.xLabel) t += ' ' + cfg.xLabel;
+      g.textAlign = k === 4 ? 'right' : 'center';
+      g.fillText(t, k === 4 ? W - padR : X(x), H - padB + 6);
+    });
 
     for (const s of cfg.series) {
       if (!s.points.length) continue;
@@ -182,7 +195,7 @@
       for (const s of SCHEMA) {
         const sec = document.createElement('details');
         sec.className = 'section';
-        sec.open = true;
+        sec.open = !s.closed;
         sec.innerHTML = `<summary>${s.section}</summary>`;
         const body = document.createElement('div');
         body.className = 'section-body';
@@ -213,6 +226,7 @@
         wrap.innerHTML = `<div class="flabel"><span>${it.label}</span></div><select>${it.options
           .map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
         const sel = wrap.querySelector('select');
+        sel.setAttribute('aria-label', it.label);
         sel.value = it.def;
         sel.addEventListener('change', () => this._set(it, sel.value));
         this.inputs[it.id] = { set: (v) => (sel.value = v) };
@@ -236,9 +250,12 @@
         <div class="flabel"><span>${it.label}</span>
           <span class="num"><input type="number" step="any" min="${it.min}" max="${it.max}"><em>${it.unit}</em></span></div>
         <div class="slider-row"><input type="range" min="0" max="${SL}" step="1"></div>
-        ${it.hint ? `<div class="hint">${it.hint}</div>` : ''}`;
+        ${it.hint ? `<div class="hint">${it.hint.split(' · ').map((s) => `<span>${s}</span>`).join(' · ')}</div>` : ''}`;
       const rng = wrap.querySelector('input[type=range]');
       const num = wrap.querySelector('input[type=number]');
+      const unit = it.unit ? ' ' + it.unit : '';
+      num.setAttribute('aria-label', it.label + (it.unit ? ` (${it.unit})` : ''));
+      rng.setAttribute('aria-label', it.label);
       if (it.widget === 'compass') {
         const cmp = this._compass((deg) => { set(deg, true); });
         wrap.querySelector('.slider-row').prepend(cmp.el);
@@ -247,6 +264,7 @@
       const show = (v) => {
         num.value = +(+v).toPrecision(6);
         rng.value = toSlider(v);
+        rng.setAttribute('aria-valuetext', num.value.replace('.', ',') + unit);
         if (it.widget === 'compass') this._compassSet(v);
       };
       const set = (v, fire) => {
@@ -291,6 +309,9 @@
 
     _set(it, v) {
       this.params[it.id] = v;
+      // elle değiştirilen değer hazır senaryodan sapıyorsa seçimi kaldır
+      const preset = PRESETS[this.presetSel && this.presetSel.value];
+      if (preset && it.id in preset.v) this.presetSel.value = '';
       this.refreshVisibility();
       this.h.onParam(it.id, v, { rebuild: !!it.rebuild, reinit: !!it.reinit });
     }
@@ -311,12 +332,12 @@
 
     _buildPresets() {
       const sel = document.getElementById('preset');
+      this.presetSel = sel;
       sel.innerHTML = '<option value="">Hazır senaryo seç…</option>' +
         Object.entries(PRESETS).map(([k, p]) => `<option value="${k}">${p.name}</option>`).join('');
       sel.addEventListener('change', () => {
         const p = PRESETS[sel.value];
         if (p) this.h.onPreset(Object.assign({ windDir: this.params.windDir }, p.v));
-        sel.value = '';
       });
     }
 
@@ -327,7 +348,22 @@
       $('btn-fast').addEventListener('click', () => this.h.onFast());
       $('btn-save').addEventListener('click', () => this.h.onSave());
       $('btn-csv').addEventListener('click', () => this.exportCSV());
-      $('btn-clear-hist').addEventListener('click', () => { this.history = []; this.renderHistory(); });
+      // Temizle: geri alınamadığı için iki adımlı onay
+      const clr = $('btn-clear-hist');
+      let clrTimer = 0;
+      const disarm = () => { clearTimeout(clrTimer); clr.classList.remove('confirm'); clr.textContent = 'Temizle'; };
+      clr.addEventListener('click', () => {
+        if (!clr.classList.contains('confirm')) {
+          clr.classList.add('confirm');
+          clr.textContent = `${this.history.length} kayıt silinsin mi?`;
+          clrTimer = setTimeout(disarm, 4000);
+          return;
+        }
+        disarm();
+        this.history = [];
+        this.renderHistory();
+      });
+      clr.addEventListener('blur', disarm);
       document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => this.h.onCamera(b.dataset.cam)));
       window.addEventListener('keydown', (e) => {
         if (e.target.matches('input, select, textarea')) return;
@@ -338,14 +374,22 @@
 
     setState(state, fast) {
       const b = document.getElementById('btn-play');
-      b.textContent = state === 'running' ? '⏸ Duraklat' : state === 'done' ? '▶ Yeniden başlat' : state === 'paused' ? '▶ Devam' : '▶ Başlat';
+      b.innerHTML = state === 'running' ? icon('pause') + '<span>Duraklat</span>'
+        : icon('play') + `<span>${state === 'done' ? 'Yeniden başlat' : state === 'paused' ? 'Devam' : 'Başlat'}</span>`;
       b.classList.toggle('running', state === 'running');
       const f = document.getElementById('btn-fast');
-      f.textContent = fast ? '■ Durdur' : '⚡ Sonuca atla';
+      f.innerHTML = fast ? icon('stop') + '<span>Durdur</span>' : icon('skip') + '<span>Sonuca atla</span>';
       const badge = document.getElementById('hud-state');
       const map = { idle: 'Hazır', running: fast ? 'Hızlı hesaplanıyor…' : 'Çalışıyor', paused: 'Duraklatıldı', done: 'Tamamlandı' };
       badge.textContent = map[state];
       badge.dataset.state = state;
+    }
+
+    setCanSave(can) {
+      const b = document.getElementById('btn-save');
+      if (b.disabled === !can) return;
+      b.disabled = !can;
+      b.title = can ? 'Şu anki sonucu kaydet' : 'Bu sonuç zaten kayıtlı ya da henüz sonuç yok';
     }
 
     // ---------------- bilgi satırları ----------------
@@ -424,15 +468,18 @@
       // lejant
       const md = obj ? obj.maxDensity : 0;
       $('legend-max').textContent = md > 0 && total > 0 ? fmtSmart(md) + ' ml/m²' : '—';
-      $('legend-mid').textContent = md > 0 && total > 0 ? fmtSmart(md * Math.pow(0.5, 1 / 0.75)) : '';
+      const hasMid = md > 0 && total > 0;
+      $('legend-mid').textContent = hasMid ? fmtSmart(md * Math.pow(0.5, 1 / 0.75)) : '';
+      document.querySelector('.legend-mid-wrap').hidden = !hasMid;
     }
 
     drawTimeChart(sim) {
       const pts = sim.samples;
       const tmax = Math.max(pts.length ? pts[pts.length - 1][0] : 1, 1);
       drawChart(document.getElementById('chart-time'), {
+        empty: pts.length < 2 ? "Başlat'a basınca birikim burada çizilir" : '',
         xmax: tmax,
-        xLabel: 's',
+        xLabel: 's', yLabel: 'ml',
         series: [
           { points: pts.map((q) => [q[0], q[2]]), color: '#8b97a8', dash: [5, 4], width: 1.5 },
           { points: pts.map((q) => [q[0], q[1]]), color: '#4ea8ff', width: 2 },
@@ -457,20 +504,25 @@
         pts.push([v, total]);
         if (!best || total < best[1]) best = [v, total];
       }
+      // mesafe modunda en az değer eksenin ucuna düşüyorsa gerçek bir optimum değildir
+      const atEdge = mode === 'distance' && best[0] >= vmax - 1e-9;
       const curRate = sim.rateFor(p.speed, stride);
       const cur = mode === 'distance' ? (p.speed > 0 ? (curRate * p.distance) / p.speed : NaN) : curRate * p.duration;
       drawChart(canvas, {
-        xmin: 0, xmax: vmax, xLabel: 'm/s',
+        xmin: 0, xmax: vmax, xLabel: 'm/s', yLabel: 'ml',
         series: [{ points: pts, color: '#4fd1a5', width: 2 }],
         markers: [
-          { x: best[0], y: best[1], color: '#ffcf5c', r: 4, label: 'en az' },
+          { x: best[0], y: best[1], color: '#ffcf5c', r: 4, label: atEdge ? 'daha hızlı → daha az' : 'en az' },
           { x: p.speed, y: cur, color: '#4ea8ff', r: 5, label: 'şu an' },
         ],
       });
       const what = mode === 'distance' ? `${fmtN(p.distance, 0)} m yol için` : `${fmtN(p.duration, 0)} s için`;
-      note.innerHTML = `${what} toplam ıslanma. En az ıslanma <b>${fmtN(best[0], 1)} m/s</b> hızda: <b>${fmtMl(best[1])}</b>. ` +
-        `Şu anki hızda: <b>${fmtMl(cur)}</b>.` + (obj.approx ? ' <span class="muted">(İnsan modelinde yaklaşık, parçalar arası gölgeleme yok sayılır.)</span>' : '') +
-        ' <span class="muted">Türbülans ihmal edilir.</span>';
+      const bestTxt = atEdge
+        ? `Hız arttıkça ıslanma azalmaya devam ediyor; grafiğin sonunda (${fmtN(vmax, 0)} m/s) <b>${fmtMl(best[1])}</b>.`
+        : `En az ıslanma <b>${fmtN(best[0], 1)} m/s</b> hızda: <b>${fmtMl(best[1])}</b>.`;
+      note.innerHTML = `${what} şu anki hızda (${fmtN(p.speed, 1)} m/s) <b>${fmtMl(cur)}</b>. ${bestTxt}` +
+        '<span class="muted">' + (obj.approx ? 'İnsan modelinde yaklaşık, parçalar arası gölgeleme yok sayılır. ' : '') +
+        'Türbülans ihmal edilir.</span>';
     }
 
     // ---------------- geçmiş ----------------
@@ -496,17 +548,22 @@
 
     renderHistory() {
       const tb = document.querySelector('#history tbody');
+      document.getElementById('btn-csv').disabled = !this.history.length;
+      document.getElementById('btn-clear-hist').disabled = !this.history.length;
       if (!this.history.length) {
         tb.innerHTML = '<tr><td colspan="7" class="muted center">Henüz kayıt yok. Bitirilen simülasyonlar burada listelenir.</td></tr>';
         return;
       }
       const minT = Math.min(...this.history.map((h) => h.total));
-      tb.innerHTML = this.history.map((h) => `
-        <tr class="${h.total === minT && this.history.length > 1 ? 'best' : ''}">
+      tb.innerHTML = this.history.map((h) => {
+        const best = h.total === minT && this.history.length > 1;
+        return `
+        <tr class="${best ? 'best' : ''}">
           <td>${h.n}</td><td>${h.shape}</td><td>${fmtN(h.speed, 1)}</td><td>${fmtN(h.dist, 0)} m<br><span class="muted">${fmtN(h.time, 0)} s</span></td>
           <td>${fmtSmart(h.intensity)} mm/sa<br><span class="muted">${h.wind}</span></td>
-          <td><b>${fmtMl(h.total)}</b></td><td class="muted">${fmtMl(h.expected)}</td>
-        </tr>`).join('');
+          <td><b>${fmtMl(h.total)}</b>${best ? '<br><span class="tag">en az</span>' : ''}</td><td class="muted">${fmtMl(h.expected)}</td>
+        </tr>`;
+      }).join('');
     }
 
     exportCSV() {

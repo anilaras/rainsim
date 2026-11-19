@@ -40,7 +40,8 @@
       setState('running');
     },
     onSave() {
-      if (sim.time > 0) ui.addHistory(sim, obj);
+      // aynı sonucu iki kez kaydetme (bitişte zaten otomatik kaydediliyor)
+      if (sim.time > 0 && !saved) { ui.addHistory(sim, obj); saved = true; }
     },
     onCamera(name) { view.setCameraPreset(name); },
   });
@@ -97,6 +98,7 @@
     if (force || now - lastUi > 120) {
       ui.updateResults(sim, obj);
       ui.drawTimeChart(sim);
+      ui.setCanSave(sim.time > 0 && !saved);
       lastUi = now;
     }
     if (speedChartDirty && (force || now - lastSpeedChart > 250)) {

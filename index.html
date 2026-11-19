@@ -7,23 +7,36 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <!-- ikonlar -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-umbrella" viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9Z"/><path d="M12 12v6.5a2.5 2.5 0 0 1-5 0"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12-7.5Z" fill="currentColor"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+      <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/></symbol>
+      <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5v14l10-7Z" fill="currentColor"/><path d="M19 5v14"/></symbol>
+      <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor"/></symbol>
+    </defs>
+  </svg>
+
   <div id="app">
     <!-- Sol: parametreler -->
     <aside id="controls" class="panel">
       <header class="brand">
-        <h1>☔ Yağmur Simülatörü</h1>
+        <h1><svg class="i" aria-hidden="true"><use href="#i-umbrella"/></svg>Yağmur Simülatörü</h1>
         <p>Yağmurun içinden geçen bir nesnenin ne kadar ıslandığını hesaplar.</p>
       </header>
       <div class="actions">
-        <button id="btn-play" class="primary">▶ Başlat</button>
-        <button id="btn-reset" title="Sıfırla (R)">↺ Sıfırla</button>
-        <button id="btn-fast" class="wide" title="Görselleştirmeyi atlayıp sonucu hızlıca hesaplar">⚡ Sonuca atla</button>
+        <button id="btn-play" class="primary"><svg class="i" aria-hidden="true"><use href="#i-play"/></svg><span>Başlat</span></button>
+        <button id="btn-reset" title="Sıfırla (R)"><svg class="i" aria-hidden="true"><use href="#i-reset"/></svg><span>Sıfırla</span></button>
+        <button id="btn-fast" class="wide" title="Görselleştirmeyi atlayıp sonucu hızlıca hesaplar"><svg class="i" aria-hidden="true"><use href="#i-skip"/></svg><span>Sonuca atla</span></button>
       </div>
-      <select id="preset" class="preset"></select>
+      <select id="preset" class="preset" aria-label="Hazır senaryo"></select>
       <div id="params"></div>
       <footer class="foot muted">
-        Kısayollar: <kbd>Boşluk</kbd> başlat/duraklat · <kbd>R</kbd> sıfırla<br>
-        Görünüm: sürükle = döndür · tekerlek = yakınlaş · sağ tık/Shift+sürükle = yükseklik
+        <span class="only-fine">Kısayollar: <kbd>Boşluk</kbd> başlat/duraklat · <kbd>R</kbd> sıfırla<br>
+        Görünüm: sürükle = döndür · tekerlek = yakınlaş · sağ tık/Shift+sürükle = yükseklik</span>
+        <span class="only-coarse">Görünüm: tek parmakla sürükle = döndür · iki parmakla sıkıştır = yakınlaş</span>
       </footer>
     </aside>
 
@@ -32,7 +45,7 @@
       <div id="three"></div>
       <div id="loading">three.js yükleniyor…</div>
       <div class="hud hud-tl">
-        <span id="hud-state" class="badge" data-state="idle">Hazır</span>
+        <span id="hud-state" class="badge" data-state="idle" role="status" aria-live="polite">Hazır</span>
         <div class="hud-grid">
           <span>Süre</span><b id="hud-time">0 s</b>
           <span>Mesafe</span><b id="hud-dist">0 m</b>
@@ -52,7 +65,7 @@
           <span>Kuru</span>
           <div class="legend-bar"></div>
           <span id="legend-max">—</span>
-          <span class="legend-mid-wrap">orta: <span id="legend-mid"></span></span>
+          <span class="legend-mid-wrap" hidden>orta: <span id="legend-mid"></span></span>
         </div>
       </div>
     </main>
@@ -66,6 +79,12 @@
       </section>
 
       <section class="card">
+        <h2>Hıza göre toplam ıslanma</h2>
+        <canvas id="chart-speed" class="chart" role="img" aria-label="Hıza göre toplam ıslanma grafiği; sonuç aşağıdaki metinde"></canvas>
+        <p id="speed-note" class="note"></p>
+      </section>
+
+      <section class="card">
         <div class="row"><span>Analitik beklenti</span><b id="r-exp">—</b></div>
         <div class="row"><span>Simülasyon – analitik farkı</span><b id="r-diff">—</b></div>
         <div class="row"><span title="Çarpan parçacık sayısına bağlı Monte Carlo belirsizliği; parçacık sayısı veya süre arttıkça azalır">İstatistiksel belirsizlik (1σ)</span><b id="r-unc">—</b></div>
@@ -75,29 +94,23 @@
       </section>
 
       <section class="card">
-        <h3>Yüzeylere göre dağılım</h3>
+        <h2>Yüzeylere göre dağılım</h2>
         <div id="r-sides"></div>
       </section>
 
       <section class="card">
-        <h3>Zamana göre birikim</h3>
+        <h2>Zamana göre birikim</h2>
         <div class="chart-legend"><span class="l-sim"></span>simülasyon <span class="l-exp"></span>analitik</div>
-        <canvas id="chart-time" class="chart"></canvas>
-      </section>
-
-      <section class="card">
-        <h3>Hıza göre toplam ıslanma</h3>
-        <canvas id="chart-speed" class="chart"></canvas>
-        <p id="speed-note" class="note"></p>
+        <canvas id="chart-time" class="chart" role="img" aria-label="Zamana göre birikim grafiği"></canvas>
       </section>
 
       <section class="card">
         <div class="card-head">
-          <h3>Kayıtlı sonuçlar</h3>
+          <h2>Kayıtlı sonuçlar</h2>
           <div class="mini-actions">
-            <button id="btn-save" title="Şu anki sonucu kaydet">+ Kaydet</button>
-            <button id="btn-csv" title="CSV olarak indir">CSV</button>
-            <button id="btn-clear-hist" title="Listeyi temizle">Temizle</button>
+            <button id="btn-save" title="Şu anki sonucu kaydet" disabled>+ Kaydet</button>
+            <button id="btn-csv" title="CSV olarak indir" disabled>CSV</button>
+            <button id="btn-clear-hist" title="Listeyi temizle" disabled>Temizle</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -126,9 +139,23 @@
   </div>
 
   <script type="module">
+    // Hata mesajını görünümün üstünde gösterir (yükleme ekranı kaldırılmış olsa bile).
+    function showError(html) {
+      let el = document.getElementById('loading');
+      if (!el) {
+        el = document.getElementById('app-error') || document.createElement('div');
+        el.id = 'app-error';
+        el.setAttribute('role', 'alert');
+        document.getElementById('viewport').appendChild(el);
+      }
+      el.innerHTML = html;
+    }
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
     window.addEventListener('error', (e) => {
-      const el = document.getElementById('loading');
-      if (el) el.textContent = 'Hata: ' + e.message;
+      const webgl = /webgl/i.test(e.message || '');
+      showError(webgl
+        ? '3B görünüm başlatılamadı.<br><small>Tarayıcınız ya da cihazınız WebGL desteklemiyor olabilir. Donanım hızlandırmayı açıp sayfayı yenileyin.</small>'
+        : 'Bir hata oluştu: ' + esc(e.message) + '<br><small>Sayfayı yenilemek çoğu zaman sorunu çözer.</small>');
     });
     try {
       const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
@@ -141,8 +168,7 @@
         });
       }
     } catch (err) {
-      const el = document.getElementById('loading');
-      if (el) el.innerHTML = 'Yükleme hatası: ' + err.message + '<br><small>three.js için internet bağlantısı gerekir.</small>';
+      showError('Yükleme hatası: ' + esc(err.message) + '<br><small>three.js için internet bağlantısı gerekir.</small>');
       console.error(err);
     }
   </script>
